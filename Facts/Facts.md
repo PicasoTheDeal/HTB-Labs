@@ -4,7 +4,7 @@
 # HackTheBox: Facts Writeup
 
 **Target IP:** `10.10.11.x` (replace with actual IP)  
-**OS:** Linux/Windows (Hybrid/Lab Environment)
+**OS:** Linux (Lab Environment)
 
 ---
 
