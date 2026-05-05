@@ -1,3 +1,6 @@
+<img width="452" height="256" alt="image" src="https://github.com/user-attachments/assets/f4e89343-36f4-4ef3-bdd1-704a65edee6b" />
+
+
 # WingData — HackTheBox Lab Walkthrough
 
 **Target:** `10.10.11.xxx`  
