@@ -1,3 +1,6 @@
+<img width="447" height="262" alt="image" src="https://github.com/user-attachments/assets/1a41c872-93c6-4cf6-8a8c-270682dd18cc" />
+
+
 # 🛡️ Penetration Testing Report: Pterodactyl
 
 ---
