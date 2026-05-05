@@ -1,3 +1,9 @@
+<img width="455" height="268" alt="image" src="https://github.com/user-attachments/assets/982e85ce-839a-4797-b4dd-25ca3c0105f4" />
+
+
+
+
+
 # SILENTIUM LAB: ENUMERATION & EXPLOITATION WRITE-UP
 
 ---
