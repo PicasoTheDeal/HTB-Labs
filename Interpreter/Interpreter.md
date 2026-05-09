@@ -1,3 +1,5 @@
+<img width="445" height="257" alt="image" src="https://github.com/user-attachments/assets/a885189e-4022-40d3-8e3a-841ff101d02d" />
+
 # Hack The Box: Interpreter Walkthrough
 
 ## 🖥️ Machine Overview
