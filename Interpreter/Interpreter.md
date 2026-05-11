@@ -162,9 +162,11 @@ r = requests.post(url, data=xml)
 print(r.text)
 EOF
 ```
-<img width="1081" height="589" alt="Screenshot (100)" src="https://github.com/user-attachments/assets/6c783c15-b49a-474c-8ae0-42bce10da70a" />
 
-**Response:**
+<img width="881" height="489" alt="Screenshot (100)" src="https://github.com/user-attachments/assets/6c783c15-b49a-474c-8ae0-42bce10da70a" />
+
+
+#### **Response:**
 `Patient ******************************** B (M), 26 years old, received from X at t`
 
 The `********************************` string is the evaluated root flag. System PWNED! 🏁
